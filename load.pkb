@@ -1,6 +1,6 @@
 CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS 
 --===========================================================================================================================================================================
-    PROCEDURE LOAD_FILE(file_name in varchar2, only_dbms_out in number default null) AS
+    PROCEDURE LOAD_FILE(file_name in varchar2, server_directory in varchar2 default '/mnt/bs', database_directory in varchar2 default 'BS_SRC', only_dbms_out in number default null) AS
         int_id_oper_dest NUMBER;
         int_id_oper_src NUMBER;
         g_date_start date := SYSDATE;
@@ -127,7 +127,7 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
                     ) 
                     ORGANIZATION EXTERNAL ( 
                         TYPE ORACLE_LOADER
-                        DEFAULT DIRECTORY BS_SRC
+                        DEFAULT DIRECTORY '||database_directory||'
                         ACCESS PARAMETERS ( 
                             records delimited by newline 
                             characterset UTF8
@@ -595,7 +595,8 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
             l_file_Length pls_integer;
             l_block_size pls_integer;
         BEGIN
-            rc('/bin/rm -f /mnt/bs/'||file_name);
+            -- java
+            rc('/bin/rm -f '||server_directory||' '||file_name);
 
             begin       
                 UTL_FILE.FREMOVE( 'BS_SRC' , convert(v_fname,'UTF8') );
@@ -652,14 +653,13 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
 
 
 --===========================================================================================================================================================================
-    PROCEDURE LOAD( only_dbms_out in number default null ) AS
+    PROCEDURE LOAD( server_directory in varchar2 default '/mnt/bs', database_directory in varchar2 default 'BS_SRC', only_dbms_out in number default null ) AS
         type vtab is table of varchar2(400);
         table_files	vtab;
         counter_files	pls_integer;
         file_name   varchar2(256);
         id_dest number;
         id_src number;
-        old_grp		varchar2(300);
     
     BEGIN
             execute immediate 'alter session set parallel_force_local=true';
@@ -671,7 +671,7 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
             execute immediate 'alter session enable parallel dml';
             execute immediate 'alter session enable parallel ddl';
             
-            get_dir_list_ext('/mnt/bs');
+            get_dir_list_ext(server_directory);
             select t.filename bulk collect into table_files from dir_list_ext t where t.fd=0 order by t.filename asc;
             if table_files.count = 0 then
                 return;
@@ -681,7 +681,7 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
     
                 BEGIN
                     file_name := table_files(counter_files);
-                    LOAD_FILE(file_name, only_dbms_out );
+                    LOAD_FILE(file_name, server_directory, database_directory, only_dbms_out );
     
                 EXCEPTION 
                     WHEN OTHERS THEN 
