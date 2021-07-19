@@ -1,4 +1,4 @@
-
+--====================================================================================================
 -- create output format for java procedure
 CREATE OR REPLACE TYPE      "DIR_TYPE" as object (
   fd   number,
@@ -7,45 +7,37 @@ CREATE OR REPLACE TYPE      "DIR_TYPE" as object (
   fpath   varchar2(4095)
 );
 create or replace TYPE      "DIR_TYPE_SET" as table of dir_type;
- 
+--==================================================================================================== 
  
 CREATE TABLE BS_SRC_LOG (
   ID NUMBER 
 , DATE_LOG DATE 
 , FILENAME VARCHAR2(500 BYTE) 
-, ID_IGLA NUMBER 
-, ID_PULT NUMBER 
+, ID_DEST NUMBER 
+, ID_SRC NUMBER 
 , IS_ERROR VARCHAR2(500 BYTE) 
 , MESSAGE VARCHAR2(4000 BYTE) 
 , DATE_START DATE 
 ); 
-
-
-CREATE TABLE BS_FINAL 
-(
+--====================================================================================================
+-- Partitioned table
+CREATE TABLE BS_FINAL (
 ID_SRC
 ...
 , LAC NUMBER NOT NULL 
 , CELL NUMBER NOT NULL 
 ...
-, SHIROTA NUMBER NOT NULL 
-, DOLGOTA NUMBER NOT NULL 
+, latitude NUMBER NOT NULL 
+, longitude NUMBER NOT NULL 
 
 , SH1 RAW(40) 
 ) 
 TABLESPACE BS_NEW 
 PCTFREE 0 
-INITRANS 1 
-STORAGE 
-( 
-  BUFFER_POOL DEFAULT 
-) 
-NOCOMPRESS 
+COMPRESS 
 PARALLEL 8 
-PARTITION BY LIST (ID_SRC) 
-(
+PARTITION BY LIST (ID_SRC) (
   PARTITION BS_1 VALUES (1) 
-  LOGGING 
   TABLESPACE BS_NEW 
   PCTFREE 0 
   INITRANS 1 
@@ -57,9 +49,8 @@ PARTITION BY LIST (ID_SRC)
     MAXEXTENTS UNLIMITED 
     BUFFER_POOL DEFAULT 
   ) 
-  NOCOMPRESS NO INMEMORY  
+  COMPRESS
 , PARTITION BS_2 VALUES (2) 
-  LOGGING 
   TABLESPACE BS_NEW 
   PCTFREE 0 
   INITRANS 1 
@@ -71,13 +62,12 @@ PARTITION BY LIST (ID_SRC)
     MAXEXTENTS UNLIMITED 
     BUFFER_POOL DEFAULT 
   ) 
-  NOCOMPRESS NO INMEMORY  
+  COMPRESS
 , 
 ...
 ...
 ... 
 , PARTITION OTHERS VALUES (DEFAULT) 
-  LOGGING 
   TABLESPACE BS_NEW 
   PCTFREE 0 
   INITRANS 1 
@@ -89,13 +79,13 @@ PARTITION BY LIST (ID_SRC)
     MAXEXTENTS UNLIMITED 
     BUFFER_POOL DEFAULT 
   ) 
-  NOCOMPRESS NO INMEMORY  
+  COMPRESS 
 );
 
-
+-- Indexes
 CREATE INDEX BS_PULT_DOLGOTA_INDEX ON BS_PULT (TRUNC("DOLGOTA",3) ASC, SHIROTA ASC) 
 LOGGING 
-TABLESPACE BS 
+TABLESPACE BS_INDEX 
 PCTFREE 10 
 INITRANS 2 
 STORAGE 
@@ -106,11 +96,11 @@ STORAGE
   MAXEXTENTS UNLIMITED 
   BUFFER_POOL DEFAULT 
 ) 
-PARALLEL 12;
+PARALLEL 8;
 
 CREATE UNIQUE INDEX BS_PULT_MAIN_IINDEX ON BS_PULT (CELL ASC, LAC ASC, ID_SRC ASC, "END_DATE" DESC) 
 LOGGING 
-TABLESPACE BS 
+TABLESPACE BS_INDEX 
 PCTFREE 10 
 INITRANS 2 
 STORAGE 
@@ -121,4 +111,5 @@ STORAGE
   MAXEXTENTS UNLIMITED 
   BUFFER_POOL DEFAULT 
 ) 
-NOPARALLEL;
+PARALLEL 8;
+--====================================================================================================

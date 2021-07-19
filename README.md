@@ -16,9 +16,10 @@ id  | coordinates | begin | end
 OUT
 id  | coordinates | begin | end
 --- | ----------- | ------| ---
-1  | 39.0, 50.0  | 2020-01-01 00:00:00  | 2020-02-29 23:59:59
-1  | 39.5, 50.5  | 2020-03-01 00:00:00  | 2030-01-01 00:00:00
-* [Initialization](initialization.ddl) - create final table, log table and output types.
+1  | 39.0, 50.0  | 1970-01-01 00:00:00  | 2020-02-29 23:59:59
+1  | 39.5, 50.5  | 2020-03-01 00:00:00  | 2099-01-01 00:00:00
+
+* Create final table, log table and others objects - [Initialization](initialization.ddl).
 * Create package LOAD_GEO.
     * [source](load.pks)
     * [body](load.pkb)

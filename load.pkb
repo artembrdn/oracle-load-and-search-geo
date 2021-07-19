@@ -14,13 +14,13 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
         date_min DATE DEFAULT TO_DATE('1970-01-01 00:00:00', 'YYYY-MM-dd hh24:mi:ss');
         --========================================================================================================= 
         --========================================================================================================= 
-        PROCEDURE L_LOGGER(message in varchar2, filename in varchar2, id_dest in number default null, id_sqr in number default null, is_error in varchar2 default null, only_dbms_output in number default null ) is
+        PROCEDURE L_LOGGER(message in varchar2, filename in varchar2, id_dest in number default null, id_src in number default null, is_error in varchar2 default null, only_dbms_output in number default null ) is
             pragma autonomous_transaction;
         BEGIN
             if only_dbms_output is not null then
-                dbms_output.put_line(SYSDATE||' '||filename|| (case when is_error is not null then '[ '||is_error||' ]' else '' end)  ||' =>'||id_dest||' =>'||id_sqr||'  => '||message);
+                dbms_output.put_line(SYSDATE||' '||filename|| (case when is_error is not null then '[ '||is_error||' ]' else '' end)  ||' =>'||id_dest||' =>'||id_src||'  => '||message);
             else
-                INSERT INTO BS_SRC_log values( src_log.nextval, SYSDATE, filename, id_dest, id_sqr, is_error, message,g_date_start );
+                INSERT INTO BS_SRC_log values( src_log.nextval, SYSDATE, filename, id_dest, id_src, is_error, message,g_date_start );
                 commit;
             end if;
         END;
@@ -82,13 +82,13 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
             ) group by t.id_oper_dest;
             --ниже происходит валидация полученной даты из имени файла.
             if date_last_load_bs is not NULL and date_last_load_bs >= date_new_file_bs then
-                RAISE_APPLICATION_ERROR(-20100, 'Not valid file date = ' || date_new_file_bs || '. Because last load bs was ' || date_last_load_bs || ' | id_dest = '||int_id_oper_dest|| ', id_sqr = '||int_id_oper_src);
+                RAISE_APPLICATION_ERROR(-20100, 'Not valid file date = ' || date_new_file_bs || '. Because last load bs was ' || date_last_load_bs || ' | id_dest = '||int_id_oper_dest|| ', id_src = '||int_id_oper_src);
             end if;
 
             id_oper_dest:= int_id_oper_dest;
             id_oper_src:= int_id_oper_src;
 
-            L_LOGGER(message => 'Validate filename complete',  filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out );
+            L_LOGGER(message => 'Validate filename complete',  filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out );
 
         END CHECK_VALID_NAME_FILE;
         --========================================================================================================= 
@@ -103,11 +103,11 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
 
             sel := 'UPDATE BS_oper_src
                         SET DATE_LOAD_BS = :date_load_bs
-                        WHERE ID_oper_src = :oper_id_sqr';
+                        WHERE ID_oper_src = :oper_id_src';
 
             execute immediate sel using date_new_file_bs, int_id_oper_src;
             commit;
-            L_LOGGER(message => 'Update statistic', filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out );
+            L_LOGGER(message => 'Update statistic', filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out );
         END;
         --====================================================================================================
         PROCEDURE CREATE_EXTERNAL_TABLE(file_name in varchar2) AS
@@ -150,7 +150,7 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
                     parallel 4';
             execute immediate sel;
 
-            L_LOGGER(message => 'Create external table', filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out );
+            L_LOGGER(message => 'Create external table', filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out );
 
         END CREATE_EXTERNAL_TABLE;
         --====================================================================================================
@@ -180,7 +180,7 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
             sel := 'select count(1) from TEMP_BS_SRC';
             execute immediate sel into count_load;
 
-            L_LOGGER(message => 'Create TEMP table, '||count_load||' rows ', filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out );
+            L_LOGGER(message => 'Create TEMP table, '||count_load||' rows ', filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out );
 
         END EXTERNAL_TO_TEMP;
         --====================================================================================================    
@@ -199,7 +199,7 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
 
             select t.is_parent into int_is_parent from bs_oper_src t where t.id_oper_src = int_id_oper_src;
             if int_is_parent = 0 then
-                L_LOGGER(message => 'Oper is child', filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out );
+                L_LOGGER(message => 'Oper is child', filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out );
 
                 --Находим строчки у дочерних операторов, если они имеются у их родителя
                 sel := 'CREATE TABLE /*+ parallel('||parallel_||')*/ TEMP_BS_SRC_PRE tablespace bs_temp AS 
@@ -207,16 +207,16 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
                                 where (t2.lac, t2.cell) not in(
                                             SELECT /*+ parallel('||parallel_||')*/distinct b.lac, b.cell 
                                                 FROM bs_final b
-                                                WHERE b.OPER_id_sqr IN (SELECT bo.ID_oper_src FROM BS_oper_src bo WHERE bo.ID_oper_dest = ' || int_id_oper_dest || ' AND bo.IS_PARENT = 1)
-                                                    or  (b.OPER_id_sqr is null  and b.OPER_id_dest = ' || int_id_oper_dest || ')
+                                                WHERE b.OPER_id_src IN (SELECT bo.ID_oper_src FROM BS_oper_src bo WHERE bo.ID_oper_dest = ' || int_id_oper_dest || ' AND bo.IS_PARENT = 1)
+                                                    or  (b.OPER_id_src is null  and b.OPER_id_dest = ' || int_id_oper_dest || ')
                                                 )
                                                     ';
                 execute immediate sel;
                 commit;
-                L_LOGGER(message => 'Delete parents BS in child file, '||count_rows||' rows out', filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out );
+                L_LOGGER(message => 'Delete parents BS in child file, '||count_rows||' rows out', filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out );
 
             elsif int_is_parent = 1 then 
-                L_LOGGER(message => 'Oper is parent', filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out );
+                L_LOGGER(message => 'Oper is parent', filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out );
                 execute immediate 'alter table BS.TEMP_bs_final rename to TEMP_BS_SRC_PRE';
             else
                 RAISE_APPLICATION_ERROR(-20004, 'Value is_parent = ' || int_is_parent || ' in table bs_oper_src dont right! Must be 0 or 1');
@@ -255,7 +255,7 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
                                     WHERE (t.latitude is null or t.longitude is null) ';
 
                     execute immediate sel;
-                    L_LOGGER(message => 'Create filter "delete_bad_coordinate", rows '||sql%rowcount, filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out );
+                    L_LOGGER(message => 'Create filter "delete_bad_coordinate", rows '||sql%rowcount, filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out );
 
                 elsif type_filter = 'filter_bad_lac_cell' then
                     sel := 'INSERT  INTO BS_SRC_FILTER 
@@ -264,7 +264,7 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
                                     WHERE (t.lac is null or t.cell is null) or (t.lac = 0 or t.cell = 0) or (t.lac = '''' or t.cell = '''')';
 
                     execute immediate sel;
-                    L_LOGGER(message => 'Create filter "filter_bad_lac_cell", rows '||sql%rowcount, filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out );
+                    L_LOGGER(message => 'Create filter "filter_bad_lac_cell", rows '||sql%rowcount, filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out );
 
                 end if;
 
@@ -288,7 +288,7 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
                     )' ;
             execute immediate sel;
 
-            L_LOGGER(message => 'Delete bad bs meta, '||sql%rowcount||' rows', filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out );
+            L_LOGGER(message => 'Delete bad bs meta, '||sql%rowcount||' rows', filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out );
             commit;
 
             sel :='insert into BS_SRC_bad 
@@ -304,7 +304,7 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
                             )  where dr > 1 and dr_laccell=1
                         )';
             execute immediate sel using file_name, SYSDATE;
-            L_LOGGER(message => 'Insert into bad bs non-consistent, '||sql%rowcount||' rows', filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out );
+            L_LOGGER(message => 'Insert into bad bs non-consistent, '||sql%rowcount||' rows', filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out );
 
             commit;
         END DELETE_BAD_BS;
@@ -326,7 +326,7 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
             execute immediate sel;
 
             execute immediate 'select count(1) from TEMP_BS_SRC_NEW_BS_SET' into count_;
-            L_LOGGER(message => 'Create new bs SET, rows '||count_, filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out );
+            L_LOGGER(message => 'Create new bs SET, rows '||count_, filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out );
 
         END CREATE_NEW_BS_SET;
         --====================================================================================================
@@ -360,7 +360,7 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
             execute immediate 'alter table BS.TEMP_BS_SRC_PRE rename to TEMP_BS_SRC_PRE_3';
             execute immediate 'alter table BS.TEMP_BS_SRC_2 rename to TEMP_BS_SRC_PRE';
 
-            L_LOGGER(message => 'Delete begin_date collisions, '||count_rows_history||' rows out', filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out );
+            L_LOGGER(message => 'Delete begin_date collisions, '||count_rows_history||' rows out', filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out );
 
         END DELETE_BEGIN_DATE_COLLISIONS;
         --====================================================================================================    
@@ -445,7 +445,7 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
             execute immediate 'alter table BS.TEMP_BS_SRC_PRE rename to TEMP_BS_SRC_PRE_4';
             execute immediate 'alter table BS.TEMP_BS_SRC_2 rename to TEMP_BS_SRC_PRE';
 
-            L_LOGGER(message => 'Detach data to PERIOD LOAD, '||count_rows_history||' rows out', filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out );
+            L_LOGGER(message => 'Detach data to PERIOD LOAD, '||count_rows_history||' rows out', filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out );
 
             commit;
         END DETACH_DATA_TO_PERIOD_LOAD;
@@ -502,7 +502,7 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
             execute immediate 'alter table BS.TEMP_BS_SRC_PRE rename to TEMP_BS_SRC_PRE_5';
             execute immediate 'alter table BS.TEMP_BS_SRC_2 rename to TEMP_BS_SRC_PRE';
 
-            L_LOGGER(message => 'Calculate date ranges, '||count_rows_history||' rows out', filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out );
+            L_LOGGER(message => 'Calculate date ranges, '||count_rows_history||' rows out', filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out );
 
             commit;
 
@@ -532,7 +532,7 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
                                 where load_type in (''max'',''b=b,e>e'')
                     )';
             execute immediate sel using int_id_oper_dest, date_max;
-            L_LOGGER(message => 'Insert into archive and delete '||sql%rowcount||' rows processed', filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out );
+            L_LOGGER(message => 'Insert into archive and delete '||sql%rowcount||' rows processed', filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out );
             --/
 
             --b>b
@@ -545,13 +545,13 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
                     when matched then update set t.end_date = f.new_date_end_act where  t.end_date=:date_max
                     ';
             execute immediate sel using int_id_oper_dest, date_max;
-            L_LOGGER(message => 'Update actual bs end_date at type b>b '||sql%rowcount||' rows processed', filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out );
+            L_LOGGER(message => 'Update actual bs end_date at type b>b '||sql%rowcount||' rows processed', filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out );
             --/
 
             sel := 'INSERT /*+ noparallel*/ INTO BS_SRC
                     select '||tab_colls||' from TEMP_BS_SRC_PRE t';
             execute immediate sel;
-            L_LOGGER(message => 'Merge completed, '||sql%rowcount||' rows inserted', filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out );
+            L_LOGGER(message => 'Merge completed, '||sql%rowcount||' rows inserted', filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out );
 
             commit;
         END MERGE_PERIOD_bs_final;
@@ -587,7 +587,7 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
             exception when others then null;
             end;
 
-            L_LOGGER(message => 'All temp data was cleared!', filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out );
+            L_LOGGER(message => 'All temp data was cleared!', filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out );
         END CLEAR_TEMP_DATA;
         --====================================================================================================
         PROCEDURE DEL_FILE(v_fname in varchar2) is
@@ -610,7 +610,7 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
                 end if;	
             end;
 
-            L_LOGGER(message => 'File deleted', filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out );
+            L_LOGGER(message => 'File deleted', filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out );
 
         END DEL_FILE;
         --====================================================================================================
@@ -637,15 +637,15 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
 
     EXCEPTION 
         WHEN file_date_less_then_act then
-            L_LOGGER(message => dbms_utility.format_error_stack||'; '||dbms_utility.format_error_backtrace, filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out, is_error => 'error_file_date' );
+            L_LOGGER(message => dbms_utility.format_error_stack||'; '||dbms_utility.format_error_backtrace, filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out, is_error => 'error_file_date' );
             DEL_FILE( file_name );
         WHEN src_new_oper_id then
-            L_LOGGER(message => dbms_utility.format_error_stack||'; '||dbms_utility.format_error_backtrace, filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out, is_error => 'error_new_oper_id' );
+            L_LOGGER(message => dbms_utility.format_error_stack||'; '||dbms_utility.format_error_backtrace, filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out, is_error => 'error_new_oper_id' );
         WHEN src_pass_oper_id then
-            L_LOGGER(message => dbms_utility.format_error_stack||'; '||dbms_utility.format_error_backtrace, filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out, is_error => 'error_pass_file' );
+            L_LOGGER(message => dbms_utility.format_error_stack||'; '||dbms_utility.format_error_backtrace, filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out, is_error => 'error_pass_file' );
             DEL_FILE( file_name );
         WHEN OTHERS THEN 
-            L_LOGGER(message => dbms_utility.format_error_stack||'; '||dbms_utility.format_error_backtrace, filename => file_name, id_dest => int_id_oper_dest, id_sqr => int_id_oper_src, only_dbms_output => only_dbms_out, is_error => 'error' );
+            L_LOGGER(message => dbms_utility.format_error_stack||'; '||dbms_utility.format_error_backtrace, filename => file_name, id_dest => int_id_oper_dest, id_src => int_id_oper_src, only_dbms_output => only_dbms_out, is_error => 'error' );
             ROLLBACK;
             RAISE;
     END LOAD_FILE;
@@ -658,7 +658,7 @@ CREATE OR REPLACE PACKAGE BODY LOAD_GEO AS
         counter_files	pls_integer;
         file_name   varchar2(256);
         id_dest number;
-        id_sqr number;
+        id_src number;
         old_grp		varchar2(300);
     
     BEGIN
