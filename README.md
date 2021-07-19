@@ -18,7 +18,7 @@ id  | coordinates | begin | end
 --- | ----------- | ------| ---
 1  | 39.0, 50.0  | 2020-01-01 00:00:00  | 2020-02-29 23:59:59
 1  | 39.5, 50.5  | 2020-03-01 00:00:00  | 2030-01-01 00:00:00
-* [Inizializaze](initialization.ddl) - create final table, log table and output types.
+* [Initialization](initialization.ddl) - create final table, log table and output types.
 * Create package LOAD_GEO.
     * [source](load.pks)
     * [body](load.pkb)
